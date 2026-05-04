@@ -1,0 +1,5 @@
+.venv/
+MonsterHunter_Screenshots/
+*.png
+*.jpg
+__pycache__/
