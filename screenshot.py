@@ -13,8 +13,8 @@ os.makedirs(SITUATION_DIR, exist_ok=True)
 CNN_INTERVAL = 2
 SITUATION_INTERVAL = 30
 
-last_cnn = 0
-last_situation = 0
+last_cnn = time.time()
+last_situation = time.time()
 
 print("スクリーンショット撮影を開始します。Ctrl + C で終了。")
 

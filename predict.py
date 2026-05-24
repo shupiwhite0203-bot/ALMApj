@@ -51,18 +51,45 @@ def load_image(path: Path, transform: transforms.Compose) -> torch.Tensor:
         return transform(image).unsqueeze(0)
 
 
-def main() -> None:
-    args = parse_args()
-    device = torch.device(args.device)
-
-    checkpoint = torch.load(args.checkpoint, map_location=device)
+def load_checkpoint_model(checkpoint_path: Path, device: torch.device) -> tuple[torch.nn.Module, list[str], int]:
+    checkpoint = torch.load(checkpoint_path, map_location=device)
     class_names: list[str] = checkpoint["class_names"]
     image_size = int(checkpoint.get("image_size", 224))
-    top_k = min(args.top_k, len(class_names))
 
     model = build_model(len(class_names)).to(device)
     model.load_state_dict(checkpoint["state_dict"])
     model.eval()
+    return model, class_names, image_size
+
+
+def predict_image(
+    image_path: Path,
+    checkpoint_path: Path,
+    top_k: int = 3,
+    device_name: str | None = None,
+) -> list[tuple[str, float]]:
+    device = torch.device(device_name or ("cuda" if torch.cuda.is_available() else "cpu"))
+    model, class_names, image_size = load_checkpoint_model(checkpoint_path, device)
+    top_k = min(top_k, len(class_names))
+    transform = build_transform(image_size)
+
+    with torch.no_grad():
+        batch = load_image(image_path, transform).to(device)
+        probabilities = torch.softmax(model(batch), dim=1)[0]
+        values, indices = torch.topk(probabilities, k=top_k)
+
+    return [
+        (class_names[index.item()], value.item())
+        for value, index in zip(values, indices)
+    ]
+
+
+def main() -> None:
+    args = parse_args()
+    device = torch.device(args.device)
+
+    model, class_names, image_size = load_checkpoint_model(args.checkpoint, device)
+    top_k = min(args.top_k, len(class_names))
 
     transform = build_transform(image_size)
     images = iter_images(args.image)
