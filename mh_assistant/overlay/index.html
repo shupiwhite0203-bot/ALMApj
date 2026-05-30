@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ALMA Monster Hunter Assistant</title>
+    <link rel="stylesheet" href="/overlay/styles.css" />
+  </head>
+  <body>
+    <main class="stage">
+      <section class="model-panel" aria-label="Live2D model preview">
+        <canvas id="live2d-canvas"></canvas>
+        <img id="texture-preview" alt="" src="/live2d-model/textures/texture_00.png" />
+        <div class="model-status" id="model-status">Live2D renderer slot</div>
+      </section>
+
+      <section class="hud" aria-live="polite">
+        <div class="speaker">ナースロボ＿タイプＴ</div>
+        <div class="subtitle" id="subtitle">狩猟アシスト待機中です。</div>
+        <div class="meta" id="meta">event: waiting</div>
+      </section>
+    </main>
+
+    <audio id="voice" preload="auto"></audio>
+    <script src="/overlay/overlay.js"></script>
+  </body>
+</html>
+

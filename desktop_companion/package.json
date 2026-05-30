@@ -1,0 +1,13 @@
+{
+  "name": "alma-desktop-companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Electron shell for the ALMA Monster Hunter Live2D desktop companion.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron . --url=http://127.0.0.1:18080/?mode=pet"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}

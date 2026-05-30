@@ -10,7 +10,8 @@ from pathlib import Path
 from predict import IMAGE_EXTENSIONS, predict_image
 
 
-DEFAULT_CHECKPOINT = Path("runs/monsters/best.pt")
+DEFAULT_MONSTER_CHECKPOINT = Path("runs/monsters/best.pt")
+DEFAULT_ANIMAL_CHECKPOINT = Path("runs/animals/best.pt")
 DEFAULT_SITUATION_DIR = Path("MonsterHunter_Screenshots/situation")
 DEFAULT_LOG_DIR = Path("runs/llm_advice")
 DEFAULT_MODEL = "gpt-5.4-mini"
@@ -18,11 +19,12 @@ DEFAULT_MODEL = "gpt-5.4-mini"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Estimate a Monster Hunter monster from a screenshot and ask a multimodal LLM for hunting advice."
+        description="Estimate an image label with a local classifier and ask a multimodal LLM for advice or feedback."
     )
     parser.add_argument("--image", type=Path, help="Screenshot to send. If omitted, the newest situation image is used.")
     parser.add_argument("--situation-dir", type=Path, default=DEFAULT_SITUATION_DIR)
-    parser.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
+    parser.add_argument("--domain", choices=["monster", "animal"], default="monster")
+    parser.add_argument("--checkpoint", type=Path, default=None)
     parser.add_argument("--top-k", type=int, default=3)
     parser.add_argument("--device", default=None)
     parser.add_argument("--model", default=os.getenv("OPENAI_MODEL", DEFAULT_MODEL))
@@ -80,12 +82,35 @@ def wait_for_stable_file(image_path: Path, timeout: float = 5.0) -> None:
         time.sleep(0.2)
 
 
-def build_prompt(predictions: list[tuple[str, float]]) -> str:
+def resolve_checkpoint(domain: str, checkpoint: Path | None) -> Path:
+    if checkpoint is not None:
+        return checkpoint
+    if domain == "animal":
+        return DEFAULT_ANIMAL_CHECKPOINT
+    return DEFAULT_MONSTER_CHECKPOINT
+
+
+def build_prompt(predictions: list[tuple[str, float]], domain: str) -> str:
     prediction_lines = "\n".join(
         f"- {name}: {score:.1%}"
         for name, score in predictions
     )
     best_name = predictions[0][0] if predictions else "unknown"
+
+    if domain == "animal":
+        return f"""あなたは画像認識テスト用の観察アシスタントです。
+画像分類器は、この画像の主な動物を「{best_name}」と推定しました。
+
+推定候補:
+{prediction_lines}
+
+画像も確認したうえで、次を日本語で簡潔に答えてください。
+1. 推定された動物名と確信度の見立て
+2. 画像内でその判断につながる特徴
+3. 分類器の推定が間違っていそうな場合の代替候補
+4. このパイプラインが正しく動いているかを確認するための短いコメント
+
+分類器の候補と画像内容が食い違う場合は、その不確実性を明記してください。"""
 
     return f"""あなたはモンスターハンターの狩猟アドバイザーです。
 画像分類器は、このスクリーンショットの主なモンスターを「{best_name}」と推定しました。
@@ -110,23 +135,35 @@ def request_advice(
     detail: str,
 ) -> str:
     try:
-        from openai import OpenAI
+        from openai import OpenAI, OpenAIError, RateLimitError
     except ImportError as exc:
         raise RuntimeError("The openai package is not installed. Run: pip install -r requirements.txt") from exc
 
     client = OpenAI(api_key=api_key)
-    response = client.responses.create(
-        model=model,
-        input=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "input_text", "text": prompt},
-                    {"type": "input_image", "image_url": image_data_url(image_path), "detail": detail},
-                ],
-            }
-        ],
-    )
+    try:
+        response = client.responses.create(
+            model=model,
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "input_text", "text": prompt},
+                        {"type": "input_image", "image_url": image_data_url(image_path), "detail": detail},
+                    ],
+                }
+            ],
+        )
+    except RateLimitError as exc:
+        message = str(exc)
+        if "insufficient_quota" in message:
+            raise RuntimeError(
+                "OpenAI API quota is insufficient. Add billing/credits to the API project, "
+                "or run with --dry-run until API billing is available."
+            ) from exc
+        raise RuntimeError(f"OpenAI API rate limit error: {exc}") from exc
+    except OpenAIError as exc:
+        raise RuntimeError(f"OpenAI API request failed: {exc}") from exc
+
     return response.output_text
 
 
@@ -146,15 +183,19 @@ def save_log(log_dir: Path, image_path: Path, predictions: list[tuple[str, float
 
 
 def process_image(args: argparse.Namespace, image_path: Path) -> None:
+    checkpoint = resolve_checkpoint(args.domain, args.checkpoint)
+
     if not image_path.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
-    if not args.checkpoint.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {args.checkpoint}")
+    if not checkpoint.exists():
+        raise FileNotFoundError(f"Checkpoint not found: {checkpoint}")
 
-    predictions = predict_image(image_path, args.checkpoint, top_k=args.top_k, device_name=args.device)
-    prompt = build_prompt(predictions)
+    predictions = predict_image(image_path, checkpoint, top_k=args.top_k, device_name=args.device)
+    prompt = build_prompt(predictions, args.domain)
 
     print(f"image: {image_path}")
+    print(f"domain: {args.domain}")
+    print(f"checkpoint: {checkpoint}")
     print("predictions:")
     for name, score in predictions:
         print(f"  {name}: {score:.4f}")

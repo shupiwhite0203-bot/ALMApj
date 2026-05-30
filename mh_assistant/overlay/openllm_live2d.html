@@ -1,0 +1,181 @@
+﻿<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ALMA Open-LLM Live2D Renderer</title>
+    <link rel="stylesheet" href="/openllm-assets/main-QEkl09-0.css" />
+    <style>
+      html,
+      body,
+      #root {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        overflow: hidden;
+        background: transparent;
+      }
+
+      body[data-alma-pet="true"] #audio-unlock {
+        right: 16px;
+        top: 16px;
+      }
+
+      img[alt="background"] {
+        display: none !important;
+      }
+
+      #live2d-internal-wrapper,
+      #canvas {
+        background: transparent !important;
+      }
+
+      #audio-unlock {
+        position: fixed;
+        right: 24px;
+        top: 24px;
+        z-index: 99999;
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 14px;
+        background: #22c55e;
+        color: #07130b;
+        font: 600 14px/1.2 system-ui, sans-serif;
+        cursor: pointer;
+        box-shadow: 0 8px 20px rgb(0 0 0 / 0.25);
+      }
+
+      #audio-unlock[data-enabled="true"] {
+        display: none;
+      }
+    </style>
+    <script>
+      function sendClientLog(level, args) {
+        const message = args
+          .map((item) => {
+            if (item instanceof Error) return `${item.name}: ${item.message}\n${item.stack || ""}`;
+            if (typeof item === "string") return item;
+            try {
+              return JSON.stringify(item);
+            } catch {
+              return String(item);
+            }
+          })
+          .join(" ");
+        fetch("/api/client-log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ level, message }),
+          keepalive: true
+        }).catch(() => {});
+      }
+
+      ["log", "warn", "error"].forEach((level) => {
+        const original = console[level].bind(console);
+        console[level] = (...args) => {
+          original(...args);
+          sendClientLog(level, args);
+        };
+      });
+      window.addEventListener("error", (event) => {
+        sendClientLog("error", [event.message, event.filename, event.lineno, event.colno, event.error]);
+      });
+      window.addEventListener("unhandledrejection", (event) => {
+        sendClientLog("error", ["Unhandled promise rejection", event.reason]);
+      });
+
+      async function unlockAudioPlayback() {
+        try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          if (AudioContextClass) {
+            const context = new AudioContextClass();
+            if (context.state === "suspended") await context.resume();
+            const buffer = context.createBuffer(1, 1, 22050);
+            const source = context.createBufferSource();
+            source.buffer = buffer;
+            source.connect(context.destination);
+            source.start(0);
+          }
+          const silent = new Audio("data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=");
+          silent.volume = 0;
+          await silent.play();
+          localStorage.setItem("almaAudioUnlocked", JSON.stringify(true));
+          document.getElementById("audio-unlock")?.setAttribute("data-enabled", "true");
+          sendClientLog("log", ["Audio playback unlocked"]);
+        } catch (error) {
+          sendClientLog("error", ["Audio unlock failed", error]);
+        }
+      }
+
+      window.addEventListener("pointerdown", () => {
+        if (localStorage.getItem("almaAudioUnlocked") !== "true") {
+          unlockAudioPlayback();
+        }
+      }, { once: true });
+
+      const modelInfo = {
+        name: "nurse_robot_type_t",
+        url: `${location.origin}/live2d-model/nurse_robot_type_t/nurse_robot_type_t.model3.json`,
+        kScale: 1.35,
+        initialXshift: 0,
+        initialYshift: 0.18,
+        pointerInteractive: true,
+        scrollToResize: true
+      };
+      localStorage.setItem("modelInfo", JSON.stringify(modelInfo));
+      localStorage.setItem("backgroundUrl", JSON.stringify(""));
+      localStorage.setItem("wsUrl", JSON.stringify(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/client-ws`));
+      localStorage.setItem("baseUrl", JSON.stringify(location.origin));
+
+      const NativeWebSocket = window.WebSocket;
+      window.WebSocket = function (url, protocols) {
+        const target = String(url);
+        if (target.includes("127.0.0.1:12393/client-ws") || target.includes("localhost:12393/client-ws")) {
+          url = `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/client-ws`;
+        }
+        return protocols ? new NativeWebSocket(url, protocols) : new NativeWebSocket(url);
+      };
+      window.WebSocket.prototype = NativeWebSocket.prototype;
+      window.WebSocket.CONNECTING = NativeWebSocket.CONNECTING;
+      window.WebSocket.OPEN = NativeWebSocket.OPEN;
+      window.WebSocket.CLOSING = NativeWebSocket.CLOSING;
+      window.WebSocket.CLOSED = NativeWebSocket.CLOSED;
+
+      const searchParams = new URLSearchParams(location.search);
+      const almaPetModeRequested = searchParams.get("pet") === "1" || searchParams.get("mode") === "pet";
+
+      if (almaPetModeRequested) {
+        document.documentElement.dataset.almaPet = "true";
+        window.addEventListener("DOMContentLoaded", () => {
+          document.body.dataset.almaPet = "true";
+        });
+      }
+
+      window.addEventListener("load", () => {
+        if (!almaPetModeRequested || !window.api?.setMode) return;
+        const unlockButton = document.getElementById("audio-unlock");
+        unlockButton?.addEventListener("mouseenter", () => {
+          window.api?.updateComponentHover?.("audio-unlock", true);
+        });
+        unlockButton?.addEventListener("mouseleave", () => {
+          window.api?.updateComponentHover?.("audio-unlock", false);
+        });
+        setTimeout(() => {
+          window.api.setMode("pet");
+        }, 800);
+      });
+    </script>
+  </head>
+  <body>
+    <button id="audio-unlock" type="button" onclick="unlockAudioPlayback()">音声を有効化</button>
+    <div id="root"></div>
+    <script>
+      if (localStorage.getItem("almaAudioUnlocked") === "true") {
+        document.getElementById("audio-unlock")?.setAttribute("data-enabled", "true");
+      }
+    </script>
+    <script type="module" src="/openllm-assets/main-nu7uwxNJ.js"></script>
+  </body>
+</html>
+
