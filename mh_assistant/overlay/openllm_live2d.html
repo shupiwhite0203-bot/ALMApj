@@ -5,7 +5,7 @@
     <base href="/" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ALMA Open-LLM Live2D Renderer</title>
-    <link rel="stylesheet" href="/openllm-assets/main-QEkl09-0.css" />
+    <link rel="stylesheet" href="/openllm-assets/__ALMA_FRONTEND_CSS__" />
     <style>
       html,
       body,
@@ -117,9 +117,9 @@
       const modelInfo = {
         name: "nurse_robot_type_t",
         url: `${location.origin}/live2d-model/nurse_robot_type_t/nurse_robot_type_t.model3.json`,
-        kScale: 1.35,
-        initialXshift: 0,
-        initialYshift: 0.18,
+        kScale: 1.0,
+        initialXshift: 0.35,
+        initialYshift: 0,
         pointerInteractive: true,
         scrollToResize: true
       };
@@ -152,6 +152,39 @@
         });
       }
 
+      function getAlmaInitialModelPosition() {
+        const height = window.innerHeight || document.documentElement.clientHeight || 1080;
+        const targetYpx = height / 3;
+        return {
+          x: 1.45,
+          y: 1 - (targetYpx / height) * 2
+        };
+      }
+
+      let almaPositionApplied = false;
+      function applyAlmaInitialModelPosition() {
+        try {
+          const adapter = window.getLAppAdapter?.();
+          const model = adapter?.getModel?.();
+          if (!adapter || !model?._modelMatrix) return false;
+          const position = getAlmaInitialModelPosition();
+          adapter.setModelPosition?.(position.x, position.y);
+          if (!almaPositionApplied) {
+            almaPositionApplied = true;
+            console.log("ALMA applied initial Live2D position", {
+              x: position.x,
+              y: position.y,
+              width: window.innerWidth,
+              height: window.innerHeight
+            });
+          }
+          return true;
+        } catch (error) {
+          console.warn("ALMA failed to apply initial Live2D position", error);
+          return false;
+        }
+      }
+
       window.addEventListener("load", () => {
         if (!almaPetModeRequested || !window.api?.setMode) return;
         const unlockButton = document.getElementById("audio-unlock");
@@ -165,6 +198,16 @@
           window.api.setMode("pet");
         }, 800);
       });
+
+      window.addEventListener("load", () => {
+        let attempts = 0;
+        const timer = setInterval(() => {
+          attempts += 1;
+          const applied = applyAlmaInitialModelPosition();
+          if (applied && attempts >= 3) clearInterval(timer);
+          if (attempts >= 30) clearInterval(timer);
+        }, 500);
+      });
     </script>
   </head>
   <body>
@@ -175,7 +218,7 @@
         document.getElementById("audio-unlock")?.setAttribute("data-enabled", "true");
       }
     </script>
-    <script type="module" src="/openllm-assets/main-nu7uwxNJ.js"></script>
+    <script type="module" src="/openllm-assets/__ALMA_FRONTEND_JS__"></script>
   </body>
 </html>
 

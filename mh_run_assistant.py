@@ -8,6 +8,10 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parent
+DEFAULT_STARTUP_MESSAGE = (
+    "狩猟アシスタントシステムアルマ、起動しました。"
+    "できる限りの支援を行います。共に頑張りましょう。"
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,6 +28,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--situation-interval", type=float, default=30.0)
     parser.add_argument("--voicevox", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--detail", choices=["low", "auto", "high"], default="auto")
     parser.add_argument("--process-existing", action="store_true")
     parser.add_argument("--desktop-pet", action="store_true", help="Launch the transparent Electron Live2D companion.")
     parser.add_argument("--electron", type=Path, default=None, help="Path to electron.exe for --desktop-pet.")
@@ -31,7 +36,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--advice-cooldown", type=float, default=30.0)
     parser.add_argument("--same-monster-cooldown", type=float, default=0.0)
     parser.add_argument("--confidence-delta", type=float, default=0.15)
-    parser.add_argument("--min-confidence", type=float, default=0.35)
+    parser.add_argument("--min-confidence", type=float, default=0.0)
+    parser.add_argument("--monster-lock-window", type=float, default=90.0)
+    parser.add_argument("--frame-burst", type=int, default=1)
+    parser.add_argument("--frame-burst-fps", type=float, default=3.0)
+    parser.add_argument("--frame-burst-dir", type=Path, default=Path("MonsterHunter_Screenshots/situation_burst"))
+    parser.add_argument("--hunt-variant", default=None, help="Optional hunt variant, for example: 歴戦王")
+    parser.add_argument("--knowledge-cache-dir", type=Path, default=Path("knowledge_cache"))
+    parser.add_argument("--no-dynamic-knowledge", action="store_true")
+    parser.add_argument("--no-dynamic-knowledge-web", action="store_true")
+    parser.add_argument("--refresh-knowledge", action="store_true")
+    parser.add_argument("--max-output-tokens", type=int, default=150)
+    parser.add_argument("--startup-message", default=DEFAULT_STARTUP_MESSAGE)
+    parser.add_argument("--no-startup-message", action="store_true")
     return parser.parse_args()
 
 
@@ -74,6 +91,8 @@ def main() -> None:
         str(args.situation_dir),
         "--checkpoint",
         str(args.checkpoint),
+        "--detail",
+        args.detail,
         "--advice-cooldown",
         str(args.advice_cooldown),
         "--same-monster-cooldown",
@@ -82,7 +101,29 @@ def main() -> None:
         str(args.confidence_delta),
         "--min-confidence",
         str(args.min_confidence),
+        "--monster-lock-window",
+        str(args.monster_lock_window),
+        "--frame-burst",
+        str(args.frame_burst),
+        "--frame-burst-fps",
+        str(args.frame_burst_fps),
+        "--frame-burst-dir",
+        str(args.frame_burst_dir),
+        "--knowledge-cache-dir",
+        str(args.knowledge_cache_dir),
+        "--max-output-tokens",
+        str(args.max_output_tokens),
     ]
+    if args.hunt_variant:
+        agent_cmd.extend(["--hunt-variant", args.hunt_variant])
+    if args.no_dynamic_knowledge:
+        agent_cmd.append("--no-dynamic-knowledge")
+    if args.no_dynamic_knowledge_web:
+        agent_cmd.append("--no-dynamic-knowledge-web")
+    if args.refresh_knowledge:
+        agent_cmd.append("--refresh-knowledge")
+    if not args.no_startup_message and args.startup_message:
+        agent_cmd.extend(["--startup-message", args.startup_message])
     if args.dry_run:
         agent_cmd.append("--dry-run")
     if args.voicevox:

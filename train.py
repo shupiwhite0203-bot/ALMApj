@@ -14,7 +14,6 @@ from tqdm import tqdm
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Train an EfficientNet-B0 image classifier.")
     parser.add_argument("--data-dir", type=Path, required=True, help="ImageFolder root directory.")

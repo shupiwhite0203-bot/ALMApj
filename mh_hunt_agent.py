@@ -3,7 +3,10 @@ from __future__ import annotations
 import argparse
 import os
 import time
+from datetime import datetime
 from pathlib import Path
+
+import pyautogui
 
 from mh_llm_advisor import (
     DEFAULT_MODEL,
@@ -40,7 +43,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--advice-cooldown", type=float, default=30.0)
     parser.add_argument("--same-monster-cooldown", type=float, default=0.0)
     parser.add_argument("--confidence-delta", type=float, default=0.15)
-    parser.add_argument("--min-confidence", type=float, default=0.35)
+    parser.add_argument("--min-confidence", type=float, default=0.0)
+    parser.add_argument("--monster-lock-window", type=float, default=90.0)
+    parser.add_argument("--frame-burst", type=int, default=1)
+    parser.add_argument("--frame-burst-fps", type=float, default=3.0)
+    parser.add_argument("--frame-burst-dir", type=Path, default=Path("MonsterHunter_Screenshots/situation_burst"))
+    parser.add_argument("--hunt-variant", default=None, help="Optional hunt variant, for example: 歴戦王")
+    parser.add_argument("--knowledge-cache-dir", type=Path, default=Path("knowledge_cache"))
+    parser.add_argument("--no-dynamic-knowledge", action="store_true")
+    parser.add_argument("--no-dynamic-knowledge-web", action="store_true")
+    parser.add_argument("--refresh-knowledge", action="store_true")
+    parser.add_argument("--max-output-tokens", type=int, default=150)
+    parser.add_argument("--startup-message", default=None)
     return parser.parse_args()
 
 
@@ -66,6 +80,13 @@ def build_pipeline(args: argparse.Namespace) -> MonsterHunterAssistantPipeline:
         same_monster_cooldown_seconds=args.same_monster_cooldown,
         confidence_delta_threshold=args.confidence_delta,
         min_confidence=args.min_confidence,
+        monster_lock_window_seconds=args.monster_lock_window,
+        hunt_variant=args.hunt_variant,
+        dynamic_knowledge=not args.no_dynamic_knowledge,
+        dynamic_knowledge_web=not args.no_dynamic_knowledge_web,
+        knowledge_cache_dir=args.knowledge_cache_dir,
+        refresh_knowledge=args.refresh_knowledge,
+        max_output_tokens=args.max_output_tokens,
     )
 
 
@@ -84,15 +105,40 @@ def print_result(result) -> None:
         print(f"live2d_event: {result.live2d_event_path}")
 
 
+def capture_burst_frames(first_image: Path, args: argparse.Namespace) -> list[Path]:
+    frame_count = max(1, args.frame_burst)
+    if frame_count <= 1:
+        return [first_image]
+
+    interval = 1.0 / max(0.1, args.frame_burst_fps)
+    args.frame_burst_dir.mkdir(parents=True, exist_ok=True)
+    frames = [first_image]
+    burst_id = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+
+    for index in range(2, frame_count + 1):
+        time.sleep(interval)
+        path = args.frame_burst_dir / f"{burst_id}_f{index:02d}.png"
+        pyautogui.screenshot().save(path)
+        frames.append(path)
+
+    return frames
+
+
 def run_once(args: argparse.Namespace) -> None:
     pipeline = build_pipeline(args)
+    if args.startup_message:
+        print_result(pipeline.emit_message(args.startup_message, expression="joy"))
     image_path = args.image or newest_image(args.situation_dir)
-    result = pipeline.process_image(image_path)
+    image_paths = capture_burst_frames(image_path, args)
+    result = pipeline.process_images(image_paths)
     print_result(result)
 
 
 def run_watch(args: argparse.Namespace) -> None:
     pipeline = build_pipeline(args)
+    if args.startup_message:
+        print_result(pipeline.emit_message(args.startup_message, expression="joy"))
+
     processed: set[Path] = set()
     if not args.process_existing:
         processed = {path.resolve() for path in iter_situation_images(args.situation_dir)}
@@ -108,7 +154,8 @@ def run_watch(args: argparse.Namespace) -> None:
                 processed.add(resolved)
                 wait_for_stable_file(image_path)
                 try:
-                    result = pipeline.process_image(image_path)
+                    image_paths = capture_burst_frames(image_path, args)
+                    result = pipeline.process_images(image_paths)
                     print_result(result)
                 except Exception as exc:
                     print(f"error: {exc}")

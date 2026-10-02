@@ -133,23 +133,49 @@ def request_advice(
     image_path: Path,
     prompt: str,
     detail: str,
+    max_output_tokens: int = 150,
+) -> str:
+    return request_advice_for_images(
+        api_key=api_key,
+        model=model,
+        image_paths=[image_path],
+        prompt=prompt,
+        detail=detail,
+        max_output_tokens=max_output_tokens,
+    )
+
+
+def request_advice_for_images(
+    api_key: str,
+    model: str,
+    image_paths: list[Path],
+    prompt: str,
+    detail: str,
+    max_output_tokens: int = 150,
 ) -> str:
     try:
         from openai import OpenAI, OpenAIError, RateLimitError
     except ImportError as exc:
         raise RuntimeError("The openai package is not installed. Run: pip install -r requirements.txt") from exc
 
+    if not image_paths:
+        raise ValueError("At least one image is required.")
+
+    content = [{"type": "input_text", "text": prompt}]
+    content.extend(
+        {"type": "input_image", "image_url": image_data_url(image_path), "detail": detail}
+        for image_path in image_paths
+    )
+
     client = OpenAI(api_key=api_key)
     try:
         response = client.responses.create(
             model=model,
+            max_output_tokens=max_output_tokens,
             input=[
                 {
                     "role": "user",
-                    "content": [
-                        {"type": "input_text", "text": prompt},
-                        {"type": "input_image", "image_url": image_data_url(image_path), "detail": detail},
-                    ],
+                    "content": content,
                 }
             ],
         )

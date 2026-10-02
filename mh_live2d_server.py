@@ -5,6 +5,7 @@ import base64
 import hashlib
 import json
 import mimetypes
+import os
 import socket
 import struct
 import threading
@@ -13,7 +14,7 @@ import webbrowser
 import wave
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from mh_assistant.live2d_assets import (
     DEFAULT_NURSE_ROBOT_LIVE2D_DIR,
@@ -25,7 +26,7 @@ ROOT = Path(__file__).resolve().parent
 OVERLAY_DIR = ROOT / "mh_assistant" / "overlay"
 EVENT_PATH = ROOT / "runs" / "live2d" / "latest_event.json"
 MODEL_DIR = ROOT / "runs" / "live2d_model" / "nurse_robot_type_t"
-OPEN_LLM_FRONTEND = Path(r"C:\Users\spieler\Open-LLM-VTuber\frontend")
+OPEN_LLM_FRONTEND = Path(os.getenv("ALMA_OPENLLM_FRONTEND", str(Path.home() / "Open-LLM-VTuber" / "frontend")))
 LOCAL_CUBISM_CORE = ROOT / "vendor" / "live2d" / "live2dcubismcore.min.js"
 WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -60,7 +61,17 @@ class OverlayHandler(BaseHTTPRequestHandler):
             self._handle_websocket()
             return
         if path == "/" or path == "/olv" or path == "/olv/":
-            self._send_file(OVERLAY_DIR / "openllm_live2d.html")
+            try:
+                page = render_frontend_page(OPEN_LLM_FRONTEND)
+            except (FileNotFoundError, ValueError) as exc:
+                self.send_error(503, str(exc))
+                return
+            body = page.encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
             return
         if path == "/preview" or path == "/preview/":
             self._send_file(OVERLAY_DIR / "index.html")
@@ -104,7 +115,7 @@ class OverlayHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
         self.connection.settimeout(0.25)
-        self._ws_send_json({"type": "full-text", "text": "ALMA Monster Hunter assistant connected."})
+        self._ws_send_json({"type": "full-text", "text": "狩猟支援システム、接続しました。"})
         self._ws_send_json(
             {
                 "type": "set-model-and-conf",
@@ -118,7 +129,10 @@ class OverlayHandler(BaseHTTPRequestHandler):
 
         connection_started_at = time.monotonic()
         initial_audio_delay = 3.0
-        last_signature: tuple[float, int] | None = None
+        # Do not replay a stale event left from a previous run when a new
+        # Live2D client connects. Only events written after this connection
+        # should trigger audio playback.
+        last_signature: tuple[float, int] | None = self._event_signature()
         while True:
             try:
                 frame = self._ws_recv_frame()
@@ -222,9 +236,9 @@ class OverlayHandler(BaseHTTPRequestHandler):
         return {
             "name": "nurse_robot_type_t",
             "url": f"http://{host}/live2d-model/nurse_robot_type_t/nurse_robot_type_t.model3.json",
-            "kScale": 1.35,
-            "initialXshift": 0,
-            "initialYshift": 0.18,
+            "kScale": 1.0,
+            "initialXshift": 1.45,
+            "initialYshift": 0.33,
             "pointerInteractive": True,
             "scrollToResize": True,
         }
@@ -377,17 +391,36 @@ def _resolve_model_path(relative_url_path: str) -> Path:
     return MODEL_DIR / relative_path
 
 
+def render_frontend_page(frontend: Path) -> str:
+    assets = frontend / "assets"
+    entries = {}
+    for suffix in ("js", "css"):
+        matches = sorted(assets.glob(f"main-*.{suffix}"))
+        if len(matches) != 1:
+            raise ValueError(
+                f"Expected one main-*.{suffix} under {assets}; found {len(matches)}. "
+                "Set --frontend-dir to a compatible Open-LLM-VTuber frontend build."
+            )
+        entries[suffix] = quote(matches[0].name)
+    page = (OVERLAY_DIR / "openllm_live2d.html").read_text(encoding="utf-8")
+    return page.replace("__ALMA_FRONTEND_CSS__", entries["css"]).replace("__ALMA_FRONTEND_JS__", entries["js"])
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the ALMA Live2D overlay server.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=18080)
     parser.add_argument("--no-open", action="store_true")
-    parser.add_argument("--model-source", type=Path, default=DEFAULT_NURSE_ROBOT_LIVE2D_DIR)
+    parser.add_argument("--frontend-dir", type=Path, default=OPEN_LLM_FRONTEND)
+    parser.add_argument("--model-source", type=Path, default=Path(os.getenv("ALMA_LIVE2D_MODEL_SOURCE", str(DEFAULT_NURSE_ROBOT_LIVE2D_DIR))))
     return parser.parse_args()
 
 
 def main() -> None:
+    global OPEN_LLM_FRONTEND
     args = parse_args()
+    OPEN_LLM_FRONTEND = args.frontend_dir.expanduser().resolve()
+    render_frontend_page(OPEN_LLM_FRONTEND)
     bundle = prepare_nurse_robot_assets(source_dir=args.model_source, output_dir=MODEL_DIR)
     print(f"prepared Live2D model: {bundle.model_json}")
 

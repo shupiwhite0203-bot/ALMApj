@@ -1,0 +1,107 @@
+{
+  "scope": "Supplied dataset only; independence from training data is NOT verified.",
+  "checkpoint_sha256": "b5d3bdbc27ff3f08ffc4fa186b44c2c51734f328716b138b9dc6e9bafb06ec77",
+  "images": 1137,
+  "classes": [
+    "アルシュベルド",
+    "チャタカブラ",
+    "リオレイア",
+    "リオレウス",
+    "レ・ダウ"
+  ],
+  "accuracy": 1.0,
+  "macro_f1": 1.0,
+  "per_class": [
+    {
+      "label": "アルシュベルド",
+      "images": 232,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    {
+      "label": "チャタカブラ",
+      "images": 246,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    {
+      "label": "リオレイア",
+      "images": 211,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    {
+      "label": "リオレウス",
+      "images": 256,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    },
+    {
+      "label": "レ・ダウ",
+      "images": 192,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0
+    }
+  ],
+  "confusion_matrix": [
+    [
+      232,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      246,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      211,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      256,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      192
+    ]
+  ],
+  "matrix_axes": "rows=true labels, columns=predicted labels, in classes order",
+  "inference_ms": {
+    "p50": 19.46850001695566,
+    "p95": 23.249799996847287
+  },
+  "image_to_prediction_ms": {
+    "p50": 73.22079999721609,
+    "p95": 80.27720000245608
+  },
+  "timing_scope": "Batch size 1, warmed-up model. Includes image loading/transform for image_to_prediction; excludes screenshot, model loading and API.",
+  "environment": {
+    "python": "3.10.11",
+    "torch": "2.11.0+cpu",
+    "torchvision": "0.26.0+cpu",
+    "device": "cpu",
+    "threads": 2,
+    "platform": "Windows",
+    "machine": "AMD64"
+  }
+}

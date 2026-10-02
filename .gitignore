@@ -1,5 +1,31 @@
+# Local Python environments and caches
 .venv/
-MonsterHunter_Screenshots/
-*.png
-*.jpg
+venv/
 __pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Local datasets, captures, weights and generated output
+/data/
+/MonsterHunter_Screenshots/
+/open_images_cache/
+/knowledge_cache/
+/runs/
+*.pt
+*.pth
+*.ckpt
+*.log
+
+# Downloaded third-party runtimes and frontend dependencies
+/vendor/
+node_modules/
+
+# Credentials and machine-specific settings
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db

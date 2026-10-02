@@ -1,0 +1,3 @@
+# Optional dependencies for download_openimages_animals.py
+-r requirements.txt
+fiftyone
